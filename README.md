@@ -2,9 +2,9 @@
 
 Gioco di corse 3D in stile anni '80, ispirato a *Stunt Car Racer*: piste sopraelevate senza guardrail, salti, turbo e danni al telaio, contro un avversario su tre giri.
 
-
 **Gioca ora:** https://guitarman344.github.io/stunt-racer/
-Un solo file HTML, nessuna dipendenza: apri `index.html` nel browser oppure attiva GitHub Pages sul repository.
+
+Un solo file HTML, nessuna dipendenza: puoi anche scaricare `index.html` e aprirlo nel browser.
 
 ## Comandi
 
