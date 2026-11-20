@@ -25,7 +25,7 @@ Su telefono compaiono i pulsanti a schermo.
 
 ### Fisica
 
-Ispirata all'originale: ogni ruota ha la sua sospensione (molla, ammortizzatore e tampone di fine corsa), l'aderenza dipende dal carico sulle gomme, in curva le gomme "strisciano" e rallentano l'auto, e in volo l'auto conserva la rotazione che aveva al decollo. Gli atterraggi che mandano la sospensione a fine corsa danneggiano il telaio. Il motore cambia suono col carico, le gomme stridono quando perdono aderenza e il telaio scricchiola nelle curve e nelle compressioni più dure.
+Ispirata all'originale: ogni ruota ha la sua sospensione (molla, ammortizzatore e tampone di fine corsa), l'aderenza dipende dal carico sulle gomme, in curva le gomme "strisciano" e rallentano l'auto, e in volo l'auto conserva la rotazione che aveva al decollo. Le curve sono sopraelevate: la pista si inclina verso l'interno e aiuta a girare. Gli atterraggi che mandano la sospensione a fine corsa danneggiano il telaio. Alla partenza, e quando si cade, una gru cala l'auto in pista appesa alle catene. Il motore cambia suono col carico, le gomme stridono quando perdono aderenza e il telaio scricchiola nelle curve e nelle compressioni più dure.
 
 ### Piste
 
@@ -62,7 +62,7 @@ On phones, on-screen buttons appear.
 
 ### Physics
 
-Inspired by the original: each wheel has its own suspension (spring, damper and bump stop), grip depends on tyre load, tyres scrub and slow the car in corners, and in the air the car keeps the rotation it had at take-off. Landings that bottom out the suspension damage the chassis. The engine note changes with load, tyres squeal when they lose grip and the chassis creaks in hard corners and compressions.
+Inspired by the original: each wheel has its own suspension (spring, damper and bump stop), grip depends on tyre load, tyres scrub and slow the car in corners, and in the air the car keeps the rotation it had at take-off. Corners are banked: the track tilts inwards and helps the car turn. Landings that bottom out the suspension damage the chassis. At the start, and after a fall, a crane lowers the car onto the track on chains. The engine note changes with load, tyres squeal when they lose grip and the chassis creaks in hard corners and compressions.
 
 ### Tracks
 

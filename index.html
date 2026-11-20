@@ -190,14 +190,19 @@ function buildTrack(def){
   placeFeatures(def,L,N,ds,K2);
   for(let k=0;k<N;k++){const s=k*ds;let h=def.base;for(const f of def.feats)h+=featH(f,s,L);H[k]=Math.max(1.5,h);
     for(const f of def.feats)if(f.t==='gap'){const d=s-f.u*L;if(d>=f.up&&d<f.up+f.gap)GP[k]=1;}}
+  // curve sopraelevate: pendenza laterale (tan dell'angolo) proporzionale alla curvatura, il bordo esterno sale
+  const BK=new Float64Array(N),BR=new Float64Array(N);
+  for(let k=0;k<N;k++)BR[k]=-Math.sign(K2[k])*Math.min(0.75,Math.abs(K2[k])*42);
+  for(let k=0;k<N;k++){let s=0;for(let q=-12;q<=12;q++)s+=BR[(k+q+N)%N];BK[k]=s/25;}
+  for(let k=0;k<N;k++)if(GP[k])BK[k]=0;
   // safe speeds for AI
-  for(let k=0;k<N;k++){const kk=Math.abs(K2[k])+1e-6;const m=0.62*1.5;const den=kk-m*0.004;SV[k]=den<=0?80:Math.min(80,Math.sqrt(m*G/den));}
+  for(let k=0;k<N;k++){const kk=Math.abs(K2[k])+1e-6;const m=0.62*1.5;const den=kk-m*0.004;SV[k]=den<=0?80:Math.min(80,Math.sqrt((m*G+0.8*G*Math.abs(BK[k]))/den));}
   for(const f of def.feats){if(Math.abs(f.amp)<2||f.t==='dip')continue;const [a,b]=featRange(f,L);let ms=0;
     for(let k=0;k<N;k++){const s=k*ds;if(s>=a&&s<=b)ms=Math.max(ms,(H[(k+1)%N]-H[k])/ds);}
     const vl=Math.max(18,(f.t==='waves'?(f.len<30?5.5:6.5):9)/Math.max(ms,0.01));for(let k=0;k<N;k++){const s=k*ds;if(s>=a-10&&s<=a+(b-a)*0.6)SV[k]=Math.min(SV[k],vl);}}
   for(const f of def.feats)if(f.t==='gap'){const [a,b]=featRange(f,L);
     for(let k=0;k<N;k++){const s=k*ds;if(s>a-140&&s<b){SV[k]=Math.max(SV[k],42);}if(s>a-170&&s<a+f.up+f.gap)GA[k]=1;}}
-  return {def,N,ds,L,X,Z,TH,K:K2,H,GP,SV,GA,HW:def.width/2};
+  return {def,N,ds,L,X,Z,TH,K:K2,H,GP,SV,GA,BK,HW:def.width/2};
 }
 
 const S={};
@@ -205,6 +210,7 @@ function samp(s,o=S){
   const T=TR;s=((s%T.L)+T.L)%T.L;const f=s/T.ds;const i=Math.floor(f)%T.N,j=(i+1)%T.N,t=f-Math.floor(f);
   o.x=T.X[i]+(T.X[j]-T.X[i])*t;o.z=T.Z[i]+(T.Z[j]-T.Z[i])*t;o.h=T.H[i]+(T.H[j]-T.H[i])*t;
   o.slope=(T.H[j]-T.H[i])/T.ds;o.k=T.K[i]+(T.K[j]-T.K[i])*t;o.th=T.TH[i]+wrapA(T.TH[j]-T.TH[i])*t;
+  o.b=T.BK[i]+(T.BK[j]-T.BK[i])*t;
   o.gap=T.GP[t<.5?i:j];o.i=i;return o;
 }
 
@@ -214,7 +220,7 @@ function buildMesh(){
   const T=TR,V=[],polys=[],shadow=[];
   const pv=(x,y,z)=>{V.push(x,y,z);return V.length/3-1;};
   const step=2;
-  const edge=(k,off,y)=>{const th=T.TH[k];return [T.X[k]+Math.cos(th)*off,y,T.Z[k]-Math.sin(th)*off];};
+  const edge=(k,off,y,flat)=>{const th=T.TH[k];return [T.X[k]+Math.cos(th)*off,y+(flat?0:T.BK[k]*off),T.Z[k]-Math.sin(th)*off];};
   for(let k=0;k<T.N;k+=step){
     const j=(k+step)%T.N,mid=(k+1)%T.N,seg=k/step;
     if(T.GP[k]||T.GP[mid]||T.GP[j])continue;
@@ -246,7 +252,7 @@ function buildMesh(){
       polys.push({line:true,v:[pv(...q1),pv(...q2)],c:[70,76,92]});
     }
     // ground shadow
-    shadow.push([edge(k,-HW,0.03),edge(k,HW,0.03),edge(j,HW,0.03),edge(j,-HW,0.03)]);
+    shadow.push([edge(k,-HW,0.03,1),edge(k,HW,0.03,1),edge(j,HW,0.03,1),edge(j,-HW,0.03,1)]);
   }
   // hills ring
   const hills=[];let seed=7;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
@@ -332,6 +338,9 @@ function addCarPolys(c,list){
     const faces=[[[3,2,6,7],1],[[0,1,2,3],.6],[[4,5,6,7],.6],[[0,3,7,4],.75],[[1,2,6,5],.75]];
     for(const [f,m] of faces){const pts=f.map(i=>P[i]);let z=0,zmax=-1e9;for(const q of pts){z+=q[2];zmax=Math.max(zmax,q[2]);}if(zmax<NEAR)continue;list.push({pts,z:z/4-0.5,c:col,m});}
   };
+  if(c.hangT>0||c.chainT>0){const up=c.hangT>0?14:14+(0.6-c.chainT)*30;const hook=L2W(0,1.5+up,0);
+    for(const [x,z] of [[-0.8,1.6],[0.8,1.6],[-0.8,-1.6],[0.8,-1.6]]){const a=L2W(x,0.95,z);if(a[2]>NEAR&&hook[2]>NEAR)list.push({line:true,pts:[a,hook],z:(a[2]+hook[2])/2-0.3,c:[150,150,140]});}
+    if(hook[2]>NEAR){const h2=L2W(0,1.5+up+40,0);if(h2[2]>NEAR)list.push({line:true,pts:[hook,h2],z:hook[2],c:[60,60,60]});}}
   box(-0.95,0.95,0.35,0.95,-2.1,2.1,c.color);
   box(-0.75,0.75,0.95,1.5,-1.2,0.6,[40,40,48]);
   WHEELS.forEach(([x,z],i)=>{const o=c.comp[i]-0.1;box(x*1.05-0.2,x*1.05+0.2,o,o+0.7,z-0.38,z+0.38,[18,18,20]);});
@@ -342,16 +351,16 @@ function addCarPolys(c,list){
 // gomme con aderenza proporzionale al carico (cerchio di attrito), deportanza, resistenza in curva (scrub),
 // trasferimento di carico longitudinale/laterale, rotazione libera in volo.
 const PH={MU:1.5,AERO:0.004,WB:2.7,PWR:175,PWR_B:290,CD:0.00058,RR:0.16,
-  K:55,C:5,REST:0.5,TRAVEL:0.36,KB:1500,CB:30,HCG:0.45,IP:1.5,IR:0.8,CA:9};
+  K:34,C:2.6,REST:0.65,TRAVEL:0.5,KB:1500,CB:30,HCG:0.45,IP:1.5,IR:0.8,CA:9};
 const WHEELS=[[-0.95,1.35],[0.95,1.35],[-0.95,-1.35],[0.95,-1.35]]; // [lx,lz] FL FR RL RR
 let cars=[],player=null,ai=null;
-function makeCar(color,x,dist){return {color,x,dist,y:0,vy:0,u:0,w:0,r:0,a:0,v:0,pitch:0,q:0,roll:0,p:0,
+function makeCar(color,x,dist){return {color,x,dist,hangT:0,hangDur:1,hangH:0,chainT:0,y:0,vy:0,u:0,w:0,r:0,a:0,v:0,pitch:0,q:0,roll:0,p:0,
   comp:[0,0,0,0],compV:[0,0,0,0],bottom:[false,false,false,false],nf:.5,nr:.5,air:false,falling:false,fallT:0,
   slip:0,scrub:0,latG:0,stress:0,boost:100,damage:0,lapsDone:0,lapStart:0,laps:[],finishT:null,maxLap:0,bumpCD:0,creakCD:0,fvs:0,fvx:0};}
 function hAt(s,x){ // altezza del piano strada sotto un punto, NaN se nel vuoto
   const T=TR;s=((s%T.L)+T.L)%T.L;const f=s/T.ds;const i=Math.floor(f)%T.N,j=(i+1)%T.N,t=f-Math.floor(f);
-  if(T.GP[t<.5?i:j]||Math.abs(x)>T.HW)return NaN;return T.H[i]+(T.H[j]-T.H[i])*t;}
-function placeOnTrack(c){const t=samp(c.dist,{});c.y=t.h+PH.REST-0.1;c.vy=0;c.q=0;c.p=0;c.roll=0;c.pitch=Math.atan(t.slope);c.u=c.u||0;c.w=0;c.r=0;c.air=false;}
+  if(T.GP[t<.5?i:j]||Math.abs(x)>T.HW)return NaN;return T.H[i]+(T.H[j]-T.H[i])*t+(T.BK[i]+(T.BK[j]-T.BK[i])*t)*x;}
+function placeOnTrack(c){const t=samp(c.dist,{});c.y=t.h+t.b*c.x+PH.REST-0.1;c.vy=0;c.q=0;c.p=0;c.roll=0;c.pitch=Math.atan(t.slope);c.u=c.u||0;c.w=0;c.r=0;c.air=false;}
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 
 function aiControl(c,t,o){
@@ -359,7 +368,8 @@ function aiControl(c,t,o){
   const look=clamp(u*0.55,9,32);
   const ta=samp(c.dist+look,{});
   let lane=o.lane;if(Math.abs(c.x)>T.HW-1.3)lane=0;
-  const desA=wrapA(ta.th-t.th)*0.55+Math.atan2(lane-c.x,look);
+  const latLook=clamp(u*0.42,9,18);
+  const desA=wrapA(ta.th-t.th)*0.55+Math.atan2(lane-c.x,latLook);
   const beta=Math.atan2(c.w,u);
   const e=desA-(c.a+beta);
   const rDes=2*u*Math.sin(e)/look+t.k*u;
@@ -372,7 +382,22 @@ function aiControl(c,t,o){
   return {steer,gas:c.u<vt-0.5?1:c.u<vt?0.4:0,brake:c.u>vt+2.5?1:0,boost:false,ai:true,power:o.skill};
 }
 
-function stepCar(c,dt,ctl,isAI){const n=3;for(let i=0;i<n;i++)stepCar1(c,dt/n,ctl,isAI);
+// Gru: l'auto è appesa alle catene, scende piano e poi viene sganciata da ~1 m
+function hangCar(c,secs,height){c.hangT=secs;c.hangDur=secs;c.hangH=height;c.u=0;c.w=0;c.r=0;c.falling=false;c.fallT=0;}
+function stepHang(c,dt,isAI){
+  c.hangT-=dt;const t=samp(c.dist,{});const k=Math.max(0,c.hangT/c.hangDur);
+  const target=t.h+t.b*c.x+PH.REST+1.0+c.hangH*k*k;
+  c.y+=(target-c.y)*Math.min(1,dt*6);c.vy=0;c.q=0;c.p=0;c.u=0;c.w=0;c.r=0;
+  c.pitch+=(Math.atan(t.slope)+Math.sin(state.t*1.3+c.x)*0.03-c.pitch)*Math.min(1,dt*3);
+  c.roll+=(Math.sin(state.t*0.9+c.dist)*0.04-c.roll)*Math.min(1,dt*3); // dondola appesa
+  c.comp=[0,0,0,0];c.air=true;c.v=0;
+  if(c.hangT<=0){c.hangT=0;c.chainT=0.6;if(!isAI)clank();}
+}
+function stepCar(c,dt,ctl,isAI){
+  if(c.chainT>0)c.chainT-=dt;
+  if(c.hangT>0){stepHang(c,dt,isAI);return;}
+  if(ctl&&ctl.hold){ctl=isAI?{lane:0,skill:0,hold:true}:{steer:0,gas:false,brake:true,boost:false};}
+  const n=3;for(let i=0;i<n;i++)stepCar1(c,dt/n,ctl,isAI);
   if(c.hitV>0){bottomOut(c,c.hitV,isAI);c.hitV=0;}}
 function stepCar1(c,dt,ctl,isAI){
   const t=samp(c.dist,{});
@@ -382,7 +407,7 @@ function stepCar1(c,dt,ctl,isAI){
     if(c.y<=ground){if(c.fallT===0&&!isAI){thump(1);crunch(1);state.shake=1;msg('SEI CADUTO',1.6,'#e8452c');}c.y=ground;c.vy=0;c.fvs*=0.9;c.fvx*=0.9;c.q=0;c.p=0;c.fallT+=dt;if(c.fallT>1.7)recover(c,isAI);}
     c.v=Math.hypot(c.fvs,c.fvx);return;
   }
-  if(isAI)ctl=aiControl(c,t,ctl);
+  if(isAI)ctl=ctl.hold?{steer:0,gas:0,brake:1}:aiControl(c,t,ctl);
   const ca=Math.cos(c.a),sa=Math.sin(c.a);
   const vs=c.u*ca-c.w*sa;
   // ---- sospensioni ----
@@ -401,7 +426,7 @@ function stepCar1(c,dt,ctl,isAI){
       // una ruota che rientra da sotto il bordo della pista non può "salire" sulla strada
       if(cmp>PH.TRAVEL*1.15&&!(c.contact&&c.contact[i])){c.comp[i]=0;c.compV[i]=0;Fsum+=0;continue;}
       if(cmp>0){
-        F=PH.K*cmp+PH.C*cv*(cv<0?1.8:1); // estensione più frenata della compressione
+        F=PH.K*cmp+PH.C*cv*(cv<0?1.5:1); // estensione più frenata della compressione
         if(cmp>PH.TRAVEL){ // tampone di fine corsa: botta sul telaio
           F+=PH.KB*(cmp-PH.TRAVEL)+PH.CB*Math.max(0,cv);
           if(!c.bottom[i]){c.bottom[i]=true;c.hitV=Math.max(c.hitV||0,cv);}
@@ -447,7 +472,9 @@ function stepCar1(c,dt,ctl,isAI){
   Fx-=PH.CD*u*Math.abs(u)+(c.air?0:PH.RR*Math.sign(u));
   // pendenza
   const along=c.air?0:-G*t.slope/Math.sqrt(1+t.slope*t.slope);
-  const du=Fx+along*ca+c.w*c.r, dw=Fy-along*sa-u*c.r;
+  // sulla curva inclinata la strada spinge l'auto verso l'interno
+  const bankA=c.air?0:-G*t.b*Math.min(1,(c.nf+c.nr)/0.9);
+  const du=Fx+along*ca+bankA*sa+c.w*c.r, dw=Fy-along*sa+bankA*ca-u*c.r;
   c.u+=du*dt;c.w+=dw*dt;
   if(c.u<0&&!ctl.brake)c.u=0;if(c.u<0)c.u=0;
   if(c.u<0.5&&!c.air){c.w*=1-dt*4;c.r*=1-dt*6;}
@@ -458,7 +485,7 @@ function stepCar1(c,dt,ctl,isAI){
   c.p+=((Tr-Fy*PH.HCG)/PH.IR)*dt;
   if(!c.air){c.q*=1-dt*1.2;c.p*=1-dt*2.5;}
   c.y+=c.vy*dt;c.pitch+=c.q*dt;c.roll+=c.p*dt;
-  if(c.air){c.p+=(-c.roll*3-c.p*2.2)*dt;}c.roll=clamp(c.roll,-0.75,0.75);
+  if(c.air){c.p+=(-c.roll*3-c.p*2.2)*dt;}c.roll=clamp(c.roll,-1.3,1.3);
   // ---- moto nel piano pista ----
   const vs2=c.u*Math.cos(c.a)-c.w*Math.sin(c.a),vx2=c.u*Math.sin(c.a)+c.w*Math.cos(c.a);
   c.a+=(c.r-t.k*vs2)*dt;c.a=wrapA(c.a);
@@ -466,13 +493,14 @@ function stepCar1(c,dt,ctl,isAI){
   c.v=Math.hypot(c.u,c.w);
   c.latG=c.latG+((u*c.r-dw*0)/G-c.latG)*Math.min(1,dt*6);
   // ---- stress del telaio: scricchiolii ----
-  c.stress=Math.abs(c.latG)*0.8+Math.max(0,(c.nf+c.nr)-1.25)*1.2+Math.abs(c.roll)*2;
+  c.stress=Math.abs(c.latG)*0.8+Math.max(0,(c.nf+c.nr)-1.25)*1.2+Math.abs(c.roll+Math.atan(t.b))*2;
   if(!isAI){c.creakCD-=dt;if(c.stress>0.75&&c.creakCD<=0&&!c.air){creak(Math.min(1,(c.stress-0.6)*1.2));c.creakCD=0.12+Math.random()*0.35/(c.stress);}}
   if(!isAI&&wasAir&&!c.air){/* atterraggio: rumore già dato da thump/bottomOut */}
   // ---- caduta ----
   const t2=samp(c.dist,{});
   const off=t2.gap||Math.abs(c.x)>TR.HW;
-  if((off&&c.y<t2.h+PH.REST-0.9)||(c.air&&c.y<t2.h-0.6&&!isNaN(hAt(c.dist,c.x)))||(Math.abs(c.roll)>0.7&&!c.air)){
+  const gh=t2.h+t2.b*clamp(c.x,-TR.HW,TR.HW);
+  if((off&&c.y<gh+PH.REST-0.9)||(c.air&&c.y<gh-0.6&&!isNaN(hAt(c.dist,c.x)))||(Math.abs(c.roll+Math.atan(t2.b))>0.7&&!c.air)){
     c.falling=true;c.fallT=0;c.fvs=vs2*0.8;c.fvx=vx2;c.q=-0.6;c.p=c.roll>0?0.8:-0.8;
   }
 }
@@ -482,15 +510,15 @@ function bottomOut(c,cv,isAI){
   c.u*=1-Math.min(0.08,cv*0.006);
   if(isAI)return;
   crunch(Math.min(1,cv/10));
-  const dmg=Math.max(0,cv-4)*3;
+  let dmg=Math.max(0,cv-5.6)*2.4;if(state.t-(c.lastHit||-9)<0.4)dmg*=0.35;c.lastHit=state.t;
   if(dmg>0){c.damage=Math.min(100,c.damage+dmg);state.shake=Math.min(1.2,0.25+dmg/16);
     if(dmg>3)msg(dmg>10?'ATTERRAGGIO DURISSIMO':'ATTERRAGGIO DURO',1.1,'#ffb21a');}
 }
 function recover(c,isAI){
   let s=((c.dist%TR.L)+TR.L)%TR.L;let k=Math.floor(s/TR.ds)%TR.N;let back=0;
   while((TR.GA[k]||TR.GP[k])&&back<TR.N){k=(k-1+TR.N)%TR.N;back++;}
-  c.dist-=back*TR.ds;c.x=0;c.a=0;c.u=8;c.falling=false;c.fallT=0;placeOnTrack(c);
-  if(!isAI){c.damage=Math.min(100,c.damage+14);msg('RECUPERO — TELAIO +14%',1.4,'#ffb21a');}
+  c.dist-=back*TR.ds;c.x=0;c.a=0;c.u=0;c.falling=false;c.fallT=0;placeOnTrack(c);c.pitch=0;c.roll=0;hangCar(c,1.8,7);c.y+=8;
+  if(!isAI){c.damage=Math.min(100,c.damage+14);msg('LA GRU TI RIMETTE IN PISTA — TELAIO +14%',1.6,'#ffb21a');}
 }
 
 // ---------- Input ----------
@@ -565,6 +593,8 @@ function burst(dur,type,freq,q,gain,sweep){const t=AC.currentTime,n=AC.createBuf
   n.connect(f);f.connect(g);g.connect(master);n.start(t,Math.random()*1.5);n.stop(t+dur+0.02);}
 // scricchiolio metallico del telaio: rumore in un filtro molto risonante con frequenza che scivola
 function creak(a){if(!AC||muted)return;const f=170+Math.random()*320;burst(0.07+Math.random()*0.16,'bandpass',f,28+Math.random()*20,0.05+a*0.22,f*(0.8+Math.random()*0.5));}
+// sgancio dalla gru: tintinnio metallico delle catene
+function clank(){if(!AC||muted)return;for(let i=0;i<5;i++)setTimeout(()=>burst(0.09,'bandpass',1800+Math.random()*1600,18,0.12,1200),i*55+Math.random()*30);}
 // botta a fine corsa / strisciata del telaio
 function crunch(a){if(!AC||muted)return;thump(Math.min(1,a+0.2));burst(0.18+a*0.2,'highpass',1400,0.7,0.06+a*0.2,500);burst(0.12,'bandpass',260,12,0.08+a*0.15,140);}
 const muteBtn=document.getElementById('mute');
@@ -583,6 +613,7 @@ function setupCars(attract){
   player=makeCar([214,180,40],-2.2,-10);ai=makeCar([200,48,36],2.2,-4);
   if(attract){ai.dist=0;ai.x=0;cars=[ai];}else cars=[player,ai];
   for(const c of cars)placeOnTrack(c);
+  if(!attract)for(const c of cars){hangCar(c,state.count-0.9,9);c.y+=11;}
 }
 
 const tracksEl=document.getElementById('tracks');
@@ -596,7 +627,7 @@ const $=id=>document.getElementById(id);
 function show(id,on){$(id).hidden=!on;}
 function startRace(){
   ensureAudio();if(AC&&AC.state==='suspended')AC.resume();
-  setupCars(false);state.mode='count';state.count=3.5;state.raceT=0;state.msgs=[];steerS=0;
+  state.count=4.5;setupCars(false);state.mode='count';state.raceT=0;state.msgs=[];steerS=0;
   show('menu',false);show('result',false);show('pause',false);touchEl.hidden=!isTouch;
 }
 function toMenu(){state.mode='menu';setupCars(true);show('result',false);show('pause',false);show('menu',true);touchEl.hidden=true;drawTrackButtons();}
@@ -634,7 +665,7 @@ function update(dt){
   if(state.mode==='pause')return;
   if(state.mode==='menu'){stepCar(ai,dt,{skill:1,lane:Math.sin(ai.dist/90)*0.9},true);return;}
   const racing=state.mode==='race'||state.mode==='done';
-  if(state.mode==='count'){state.count-=dt;if(state.count<=0){state.mode='race';msg('VIA!',1);}}
+  if(state.mode==='count'){state.count-=dt;stepCar(player,dt,{hold:true},false);stepCar(ai,dt,{hold:true},true);if(state.count<=0){state.mode='race';msg('VIA!',1);}}
   const ctl=window.__botCtl?window.__botCtl(player,samp(player.dist,{})):playerCtl(dt);
   if(state.mode==='race'){
     state.raceT+=dt;
@@ -673,6 +704,12 @@ function drawCockpit(c,ctl){
     ctx.fillStyle='#0b0b0d';ctx.save();ctx.translate(x+ww/2,y+wh/2);ctx.rotate(steer*Math.PI/180);ctx.fillRect(-ww/2,-wh/2,ww,wh);
     ctx.fillStyle='#24262c';const tread=(state.t*c.u*0.8)%12;for(let i=-wh/2+tread-12;i<wh/2;i+=12){ctx.fillRect(-ww/2,i,ww,4);}
     ctx.restore();}
+  // catene della gru (partenza e recupero): salgono dagli attacchi sul cofano
+  if(c.hangT>0||c.chainT>0){const lift=c.hangT>0?0:(0.6-c.chainT)/0.6*top;
+    for(const side of [-1,1]){const x0=W*(0.5+side*0.13),y0=top-H*0.07+sus,x1=W*(0.5+side*0.05),y1=-20;
+      const n=22;for(let i=0;i<n;i++){const t=i/n;const x=x0+(x1-x0)*t,y=y0+(y1-y0)*t-lift;if(y>top)continue;
+        ctx.save();ctx.translate(x,y);ctx.rotate(Math.atan2(y1-y0,x1-x0)+(i%2?0:Math.PI/2)*0);ctx.strokeStyle=i%2?'#8d8a80':'#5f5d57';ctx.lineWidth=3;
+        ctx.beginPath();ctx.ellipse(0,0,i%2?9:7,i%2?4:2.5,0,0,Math.PI*2);ctx.stroke();ctx.restore();}}}
   // roll-cage
   ctx.fillStyle='#101219';ctx.fillRect(0,0,W,Math.max(10,H*0.025));
   ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(W*0.06,0);ctx.lineTo(0,top*0.55);ctx.closePath();ctx.fill();
