@@ -83,7 +83,7 @@ h2{font-family:var(--font-d);font-size:clamp(24px,6vw,38px);margin:0;letter-spac
         <span><kbd>↑</kbd> <kbd>W</kbd></span><span>accelera</span>
         <span><kbd>↓</kbd> <kbd>S</kbd></span><span>frena</span>
         <span><kbd>←</kbd><kbd>→</kbd> <kbd>A</kbd><kbd>D</kbd></span><span>sterza (a terra soltanto)</span>
-        <span><kbd>Spazio</kbd></span><span>turbo, riserva limitata per gara</span>
+        <span><kbd>↑</kbd> + <kbd>Spazio</kbd></span><span>turbo: tienili premuti insieme, la riserva dura circa 9 secondi per gara</span>
         <span><kbd>P</kbd></span><span>pausa · <kbd>M</kbd> audio</span>
       </div>
       <label class="opt"><input type="checkbox" id="assist" checked> Sterzo assistito: l'auto si raddrizza da sola quando non sterzi</label>
@@ -449,7 +449,7 @@ function stepCar1(c,dt,ctl,isAI){
   const u=c.u,au=Math.max(Math.abs(u),3);
   const gripF=PH.MU*G*Math.max(0,c.nf),gripR=PH.MU*G*Math.max(0,c.nr),grip=gripF+gripR;
   let Fx=0,Fy=0;
-  const boosting=!isAI&&ctl.boost&&c.boost>0&&state.mode==='race';
+  const boosting=!isAI&&ctl.boost&&ctl.gas&&!c.air&&c.boost>0&&state.mode==='race';
   if(boosting)c.boost=Math.max(0,c.boost-11*dt);
   const thr=ctl.gas?(typeof ctl.gas==='number'?ctl.gas:1):0;
   if(!c.air){
