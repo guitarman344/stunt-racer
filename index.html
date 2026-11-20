@@ -116,14 +116,14 @@ h2{font-family:var(--font-d);font-size:clamp(24px,6vw,38px);margin:0;letter-spac
 "use strict";
 // ---------- Track definitions ----------
 const TRACKS=[
- {id:'dorso',name:'Dorso di Mulo',desc:'Gobbe in serie e un dosso enorme a metà giro.',base:6,width:9,ai:50,
-  pts:[[0,0],[160,0],[300,10],[380,90],[360,210],[260,280],[110,290],[-20,270],[-140,210],[-170,110],[-110,25]],
+ {id:'dorso',name:'Dorso di Mulo',desc:'Gobbe in serie e un dosso enorme poco dopo la partenza.',base:6,width:9,ai:50,
+  pts:[[0,0],[120,0],[240,0],[360,0],[480,0],[590,60],[600,180],[600,300],[600,420],[520,510],[400,520],[280,520],[160,520],[40,520],[-80,470],[-110,360],[-110,240],[-110,120],[-80,30]],
   feats:[{t:'waves',u:.06,n:2,len:42,amp:4},{t:'hump',u:.40,len:74,amp:8},{t:'waves',u:.64,n:4,len:26,amp:2.2},{t:'dip',u:.86,len:60,amp:-3}]},
  {id:'ponte',name:'Il Ponte Rotto',desc:'Due rampe che finiscono nel vuoto. Sotto i 30 m/s non arrivi dall\'altra parte.',base:8,width:9,ai:52,
-  pts:[[0,0],[150,0],[300,0],[420,0],[500,60],[500,160],[420,220],[250,220],[100,220],[-40,220],[-120,160],[-120,60],[-60,0]],
+  pts:[[0,0],[150,0],[300,0],[450,0],[600,0],[710,60],[740,180],[740,320],[740,460],[700,570],[590,620],[450,620],[300,620],[150,620],[20,600],[-90,520],[-120,400],[-120,270],[-120,140],[-90,40]],
   feats:[{t:'gap',u:.08,up:70,amp:6,gap:16,down:55},{t:'waves',u:.45,n:3,len:34,amp:3},{t:'gap',u:.655,up:60,amp:5,gap:22,down:55}]},
  {id:'russe',name:'Montagne Russe',desc:'Saliscendi ripidi, un trampolino e un tratto finale a dentiera.',base:9,width:8.5,ai:49,
-  pts:[[0,0],[160,0],[260,40],[300,140],[250,230],[150,230],[110,300],[170,390],[70,450],[-80,420],[-150,300],[-100,170],[-140,70],[-90,0]],
+  pts:[[0,0],[150,0],[300,0],[450,0],[600,0],[720,50],[760,170],[760,320],[760,470],[740,600],[640,690],[500,700],[350,700],[200,700],[90,650],[60,540],[0,450],[-110,420],[-170,330],[-170,200],[-150,80],[-80,15]],
   feats:[{t:'waves',u:.04,n:3,len:50,amp:6},{t:'hump',u:.28,len:90,amp:11},{t:'kick',u:.50,len:55,amp:4.5},{t:'waves',u:.70,n:5,len:22,amp:2.2},{t:'dip',u:.90,len:70,amp:-4}]}
 ];
 
@@ -143,6 +143,27 @@ function featH(f,s,L){
 }
 const wrapA=a=>{while(a>Math.PI)a-=2*Math.PI;while(a<-Math.PI)a+=2*Math.PI;return a;};
 
+// Sposta salti e gobbe sui tratti più dritti: in volo l'auto mantiene la direzione, quindi i salti vanno sui rettilinei.
+function placeFeatures(def,L,N,ds,K){
+  if(def._placed)return;def._placed=true;
+  const len=f=>{const [a,b]=featRange(f,L);return b-a;};
+  const taken=[[0,40],[L-40,L]];
+  const order=def.feats.map((f,i)=>i).sort((i,j)=>Math.abs(def.feats[j].amp)*len(def.feats[j])-Math.abs(def.feats[i].amp)*len(def.feats[i]));
+  for(const fi of order){const f=def.feats[fi];if(f.t==='dip')continue;
+    const fl=len(f),pre=50,post=f.t==='gap'?60:95;let best=null,bestScore=1e9;
+    for(let s0=pre;s0+fl+post<L;s0+=ds*2){
+      const a=s0-pre,b=s0+fl+post;
+      if(taken.some(([x,y])=>a<y+20&&b>x-20))continue;
+      let m=0;for(let s=a;s<=b;s+=ds){m=Math.max(m,Math.abs(K[Math.floor(s/ds)%N]));}
+      const score=m+Math.abs(s0/L-f.u)*0.002;
+      if(score<bestScore){bestScore=score;best=s0;}
+    }
+    if(best!=null){f.u=best/L;taken.push([best-pre,best+fl+post]);}
+  }
+  for(const f of def.feats){if(f.t!=='dip')continue;const [a,b]=featRange(f,L);
+    if(taken.some(([x,y])=>a<y&&b>x)){for(let s0=40;s0+len(f)<L-40;s0+=ds*4){if(!taken.some(([x,y])=>s0<y&&s0+len(f)>x)){f.u=s0/L;break;}}}
+    taken.push(featRange(f,L));}
+}
 function buildTrack(def){
   const P=def.pts,n=P.length,dense=[];
   for(let i=0;i<n;i++){
@@ -166,10 +187,14 @@ function buildTrack(def){
   // smooth curvature
   const K2=new Float64Array(N);for(let k=0;k<N;k++){let s=0;for(let q=-3;q<=3;q++)s+=K[(k+q+N)%N];K2[k]=s/7;}
   const L=total;
+  placeFeatures(def,L,N,ds,K2);
   for(let k=0;k<N;k++){const s=k*ds;let h=def.base;for(const f of def.feats)h+=featH(f,s,L);H[k]=Math.max(1.5,h);
     for(const f of def.feats)if(f.t==='gap'){const d=s-f.u*L;if(d>=f.up&&d<f.up+f.gap)GP[k]=1;}}
   // safe speeds for AI
-  for(let k=0;k<N;k++){const kk=Math.abs(K2[k])+1e-6;const c=1.55/kk;const v=(-1+Math.sqrt(1+4*(1/45)*c))/(2/45);SV[k]=Math.min(80,v);}
+  for(let k=0;k<N;k++){const kk=Math.abs(K2[k])+1e-6;const m=0.62*1.5;const den=kk-m*0.004;SV[k]=den<=0?80:Math.min(80,Math.sqrt(m*G/den));}
+  for(const f of def.feats){if(Math.abs(f.amp)<2||f.t==='dip')continue;const [a,b]=featRange(f,L);let ms=0;
+    for(let k=0;k<N;k++){const s=k*ds;if(s>=a&&s<=b)ms=Math.max(ms,(H[(k+1)%N]-H[k])/ds);}
+    const vl=Math.max(18,(f.t==='waves'?(f.len<30?5.5:6.5):9)/Math.max(ms,0.01));for(let k=0;k<N;k++){const s=k*ds;if(s>=a-10&&s<=a+(b-a)*0.6)SV[k]=Math.min(SV[k],vl);}}
   for(const f of def.feats)if(f.t==='gap'){const [a,b]=featRange(f,L);
     for(let k=0;k<N;k++){const s=k*ds;if(s>a-140&&s<b){SV[k]=Math.max(SV[k],42);}if(s>a-170&&s<a+f.up+f.gap)GA[k]=1;}}
   return {def,N,ds,L,X,Z,TH,K:K2,H,GP,SV,GA,HW:def.width/2};
@@ -300,8 +325,8 @@ function drawWorldLine(a,b,c){let A=toCam(...a),B=toCam(...b);if(A[2]<NEAR&&B[2]
 
 function carWorld(c){const t=samp(c.dist,{});const n=[Math.cos(t.th),-Math.sin(t.th)];return {x:t.x+n[0]*c.x,z:t.z+n[1]*c.x,th:t.th,t};}
 function addCarPolys(c,list){
-  const w=carWorld(c),yaw=w.th+c.a,p=c.pitch,cyw=Math.cos(yaw),syw=Math.sin(yaw),cp=Math.cos(p),sp=Math.sin(p);
-  const L2W=(lx,ly,lz)=>{const y=ly*cp+lz*sp,z=-ly*sp+lz*cp;return toCam(w.x+lx*cyw+z*syw,c.y+y,w.z-lx*syw+z*cyw);};
+  const w=carWorld(c),yaw=w.th+c.a,p=c.pitch,cyw=Math.cos(yaw),syw=Math.sin(yaw),cp=Math.cos(p),sp=Math.sin(p),crl=Math.cos(c.roll),srl=Math.sin(c.roll),base=c.y-PH.REST+0.05;
+  const L2W=(lx,ly0,lz)=>{const lx2=lx*crl+ly0*srl,ly=-lx*srl+ly0*crl;const y=ly*cp+lz*sp,z=-ly*sp+lz*cp;return toCam(w.x+lx2*cyw+z*syw,base+y,w.z-lx2*syw+z*cyw);};
   const box=(x0,x1,y0,y1,z0,z1,col)=>{
     const P=[[x0,y0,z0],[x1,y0,z0],[x1,y1,z0],[x0,y1,z0],[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]].map(q=>L2W(...q));
     const faces=[[[3,2,6,7],1],[[0,1,2,3],.6],[[4,5,6,7],.6],[[0,3,7,4],.75],[[1,2,6,5],.75]];
@@ -309,80 +334,162 @@ function addCarPolys(c,list){
   };
   box(-0.95,0.95,0.35,0.95,-2.1,2.1,c.color);
   box(-0.75,0.75,0.95,1.5,-1.2,0.6,[40,40,48]);
-  for(const [x,z] of [[-1,1.35],[1,1.35],[-1,-1.35],[1,-1.35]])box(x-0.2,x+0.2,0,0.7,z-0.38,z+0.38,[18,18,20]);
+  WHEELS.forEach(([x,z],i)=>{const o=c.comp[i]-0.1;box(x*1.05-0.2,x*1.05+0.2,o,o+0.7,z-0.38,z+0.38,[18,18,20]);});
 }
 
 // ---------- Cars & physics ----------
+// Modello: corpo rigido con 4 sospensioni indipendenti (molla + ammortizzatore + tampone di fine corsa),
+// gomme con aderenza proporzionale al carico (cerchio di attrito), deportanza, resistenza in curva (scrub),
+// trasferimento di carico longitudinale/laterale, rotazione libera in volo.
+const PH={MU:1.5,AERO:0.004,WB:2.7,PWR:175,PWR_B:290,CD:0.00058,RR:0.16,
+  K:55,C:5,REST:0.5,TRAVEL:0.36,KB:1500,CB:30,HCG:0.45,IP:1.5,IR:0.8,CA:9};
+const WHEELS=[[-0.95,1.35],[0.95,1.35],[-0.95,-1.35],[0.95,-1.35]]; // [lx,lz] FL FR RL RR
 let cars=[],player=null,ai=null;
-function makeCar(color,x,dist){return {color,x,dist,y:0,vy:0,v:0,a:0,air:false,falling:false,fallT:0,pitch:0,boost:100,damage:0,susp:0,suspV:0,lapsDone:0,lapStart:0,laps:[],finishT:null,maxLap:0,bumpCD:0};}
-function placeOnTrack(c){const t=samp(c.dist);c.y=t.h;c.vy=0;c.pitch=Math.atan(t.slope);}
+function makeCar(color,x,dist){return {color,x,dist,y:0,vy:0,u:0,w:0,r:0,a:0,v:0,pitch:0,q:0,roll:0,p:0,
+  comp:[0,0,0,0],compV:[0,0,0,0],bottom:[false,false,false,false],nf:.5,nr:.5,air:false,falling:false,fallT:0,
+  slip:0,scrub:0,latG:0,stress:0,boost:100,damage:0,lapsDone:0,lapStart:0,laps:[],finishT:null,maxLap:0,bumpCD:0,creakCD:0,fvs:0,fvx:0};}
+function hAt(s,x){ // altezza del piano strada sotto un punto, NaN se nel vuoto
+  const T=TR;s=((s%T.L)+T.L)%T.L;const f=s/T.ds;const i=Math.floor(f)%T.N,j=(i+1)%T.N,t=f-Math.floor(f);
+  if(T.GP[t<.5?i:j]||Math.abs(x)>T.HW)return NaN;return T.H[i]+(T.H[j]-T.H[i])*t;}
+function placeOnTrack(c){const t=samp(c.dist,{});c.y=t.h+PH.REST-0.1;c.vy=0;c.q=0;c.p=0;c.roll=0;c.pitch=Math.atan(t.slope);c.u=c.u||0;c.w=0;c.r=0;c.air=false;}
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 
-const steerRate=v=>2.0/(1+v/45);
-function stepCar(c,dt,ctl,isAI){
+function aiControl(c,t,o){
+  const T=TR,u=Math.max(c.u,1);
+  const look=clamp(u*0.55,9,32);
+  const ta=samp(c.dist+look,{});
+  let lane=o.lane;if(Math.abs(c.x)>T.HW-1.3)lane=0;
+  const desA=wrapA(ta.th-t.th)*0.55+Math.atan2(lane-c.x,look);
+  const beta=Math.atan2(c.w,u);
+  const e=desA-(c.a+beta);
+  const rDes=2*u*Math.sin(e)/look+t.k*u;
+  const dMax=0.55/(1+u/16);
+  let steer=clamp(Math.atan(rDes*PH.WB/u)/dMax,-1,1);if(c.air)steer=0;
+  // velocità obiettivo: minimo della curva di frenata sui prossimi 150 m
+  let vt=1e9;const k0=t.i;
+  for(let q=0;q<75;q++){const sv=T.SV[(k0+q)%T.N];const d=q*T.ds;vt=Math.min(vt,Math.sqrt(sv*sv+2*9*d));}
+  vt=Math.min(vt,T.def.ai*o.skill);
+  return {steer,gas:c.u<vt-0.5?1:c.u<vt?0.4:0,brake:c.u>vt+2.5?1:0,boost:false,ai:true,power:o.skill};
+}
+
+function stepCar(c,dt,ctl,isAI){const n=3;for(let i=0;i<n;i++)stepCar1(c,dt/n,ctl,isAI);
+  if(c.hitV>0){bottomOut(c,c.hitV,isAI);c.hitV=0;}}
+function stepCar1(c,dt,ctl,isAI){
   const t=samp(c.dist,{});
   if(c.falling){
-    c.vy-=G*dt;c.y+=c.vy*dt;c.dist+=c.v*Math.cos(c.a)*dt;c.x+=c.v*Math.sin(c.a)*dt;c.pitch+= (-0.9-c.pitch)*dt*1.5;
-    if(c.y<=0){if(c.fallT===0&&!isAI){thump(1);state.shake=1;msg('SEI CADUTO',1.6,'#e8452c');}c.y=0;c.vy=0;c.v*=0.9;c.fallT+=dt;if(c.fallT>1.7)recover(c,isAI);}
-    return;
+    c.vy-=G*dt;c.y+=c.vy*dt;c.dist+=c.fvs*dt;c.x+=c.fvx*dt;c.pitch+=c.q*dt;c.roll+=c.p*dt;c.q+=(-1.2-c.q)*dt;
+    const ground=PH.REST-0.1;
+    if(c.y<=ground){if(c.fallT===0&&!isAI){thump(1);crunch(1);state.shake=1;msg('SEI CADUTO',1.6,'#e8452c');}c.y=ground;c.vy=0;c.fvs*=0.9;c.fvx*=0.9;c.q=0;c.p=0;c.fallT+=dt;if(c.fallT>1.7)recover(c,isAI);}
+    c.v=Math.hypot(c.fvs,c.fvx);return;
   }
-  // longitudinal
-  let acc=0;
-  const grounded=!c.air;
-  if(isAI){
-    let tgt=1e9;const k0=t.i;for(let q=0;q<45;q++){tgt=Math.min(tgt,TR.SV[(k0+q)%TR.N]);}
-    let vt=Math.min(tgt,TR.def.ai*ctl.skill);
-    acc=c.v<vt?11:-16;
-    if(grounded)acc-=G*t.slope*0.5;
-  }else{
-    const vmax=ctl.boost&&c.boost>0?78:60;
-    if(ctl.gas)acc+=16*(1-c.v/vmax);
-    if(ctl.boost&&c.boost>0&&state.mode==='race'){acc+=9;c.boost=Math.max(0,c.boost-11*dt);}
-    if(ctl.brake)acc-=26;
-    if(!ctl.gas&&!ctl.brake)acc-=2.5;
-    if(grounded)acc-=G*t.slope*0.85;
-    acc-=0.0007*c.v*c.v;
-    if(!grounded)acc*=0.15;
+  if(isAI)ctl=aiControl(c,t,ctl);
+  const ca=Math.cos(c.a),sa=Math.sin(c.a);
+  const vs=c.u*ca-c.w*sa;
+  // ---- sospensioni ----
+  const cp=Math.cos(c.pitch),sp=Math.sin(c.pitch),cr=Math.cos(c.roll),sr=Math.sin(c.roll);
+  let Fsum=0,Tp=0,Tr=0,nf=0,nr=0,contacts=0;const cnt=[0,0,0,0];
+  for(let i=0;i<4;i++){
+    const [lx,lz]=WHEELS[i];
+    const wx=c.x+lx*ca+lz*sa,wd=c.dist+lz*ca-lx*sa;
+    const g=hAt(wd,wx);
+    const by=c.y+lz*sp-lx*sr;
+    const bv=c.vy+lz*c.q*cp-lx*c.p*cr;
+    let F=0;
+    if(!isNaN(g)){
+      const gs=(hAt(wd+0.5,wx)-hAt(wd-0.5,wx));const gv=isNaN(gs)?0:gs*vs;
+      const cmp=g+PH.REST-by,cv=gv-bv;
+      // una ruota che rientra da sotto il bordo della pista non può "salire" sulla strada
+      if(cmp>PH.TRAVEL*1.15&&!(c.contact&&c.contact[i])){c.comp[i]=0;c.compV[i]=0;Fsum+=0;continue;}
+      if(cmp>0){
+        F=PH.K*cmp+PH.C*cv*(cv<0?1.8:1); // estensione più frenata della compressione
+        if(cmp>PH.TRAVEL){ // tampone di fine corsa: botta sul telaio
+          F+=PH.KB*(cmp-PH.TRAVEL)+PH.CB*Math.max(0,cv);
+          if(!c.bottom[i]){c.bottom[i]=true;c.hitV=Math.max(c.hitV||0,cv);}
+        }else c.bottom[i]=false;
+        F=Math.max(0,F);contacts++;cnt[i]=1;
+        if(cv>4.5&&c.compV[i]<=4.5&&!isAI)thump(Math.min(1,cv/14));
+      }else c.bottom[i]=false;
+      c.comp[i]=Math.max(0,cmp);c.compV[i]=cv;
+    }else{c.comp[i]=0;c.compV[i]=0;c.bottom[i]=false;}
+    Fsum+=F;Tp+=F*lz*cp;Tr-=F*lx*cr;
+    if(lz>0)nf+=F;else nr+=F;
   }
-  c.v=Math.max(0,c.v+acc*dt);
-  // steering
-  if(isAI){
-    const xt=ctl.lane;c.a=Math.max(-0.25,Math.min(0.25,(xt-c.x)*0.06));
-    c.dist+=c.v*Math.cos(c.a)*dt;c.x+=c.v*Math.sin(c.a)*dt*0.6;
-  }else{
-    if(grounded){c.a+=ctl.steer*steerRate(c.v)*dt*Math.min(1,c.v/6);c.a*=1-0.7*dt;}
-    c.a-=t.k*c.v*Math.cos(c.a)*dt;
-    c.a=Math.max(-1.1,Math.min(1.1,c.a));
-    c.dist+=c.v*Math.cos(c.a)*dt;c.x+=c.v*Math.sin(c.a)*dt;
-  }
-  // vertical
-  c.vy-=G*dt;c.y+=c.vy*dt;
+  c.contact=cnt;
+  c.nf+=(nf/G-c.nf)*Math.min(1,dt*20);c.nr+=(nr/G-c.nr)*Math.min(1,dt*20);
+  const wasAir=c.air;c.air=contacts===0;
+  // ---- gomme ----
+  const u=c.u,au=Math.max(Math.abs(u),3);
+  const gripF=PH.MU*G*Math.max(0,c.nf),gripR=PH.MU*G*Math.max(0,c.nr),grip=gripF+gripR;
+  let Fx=0,Fy=0;
+  const boosting=!isAI&&ctl.boost&&c.boost>0&&state.mode==='race';
+  if(boosting)c.boost=Math.max(0,c.boost-11*dt);
+  const thr=ctl.gas?(typeof ctl.gas==='number'?ctl.gas:1):0;
+  if(!c.air){
+    const P=(boosting?PH.PWR_B:PH.PWR)*(ctl.power||1)*(1-c.damage*0.0015);
+    Fx+=thr*Math.min(gripR*0.95,P/Math.max(u,4));
+    if(ctl.brake&&u>0.3)Fx-=grip*0.9;
+    if(!thr&&!ctl.brake)Fx-=1.4; // freno motore
+    // sterzo sensibile alla velocità, limitato dall'aderenza dell'asse anteriore (sottosterzo)
+    const dMax=0.55/(1+Math.max(u,0)/16);
+    const rDes=u*Math.tan(ctl.steer*dMax)/PH.WB;
+    const rLim=gripF*2.1/au;
+    c.r+=(clamp(rDes,-rLim,rLim)-c.r)*Math.min(1,dt*(thr||ctl.steer?7:9));
+    Fx=clamp(Fx,-grip,grip);
+    const latCap=Math.sqrt(Math.max(0,grip*grip-Fx*Fx));
+    const ca2=PH.CA*(c.nf+c.nr)*(thr||ctl.brake?1:1.35); // a gas rilasciato l'auto si riallinea
+    Fy=clamp(-c.w*ca2,-latCap,latCap);
+    // resistenza in curva: le gomme che lavorano di deriva frenano l'auto
+    const slipA=Math.min(0.7,Math.abs(c.w)/Math.max(au,5));
+    c.scrub=Math.abs(Fy)*slipA*1.1+Math.abs(u*c.r)*0.045+Math.abs(ctl.steer)*u*0.004;
+    Fx-=c.scrub*Math.sign(u);
+    c.slip=slipA+(Math.abs(Fy)>=latCap*0.97&&Math.abs(c.w)>0.8?0.25:0);
+  }else{c.r*=1-0.4*dt;c.scrub=0;c.slip=0;}
+  Fx-=PH.CD*u*Math.abs(u)+(c.air?0:PH.RR*Math.sign(u));
+  // pendenza
+  const along=c.air?0:-G*t.slope/Math.sqrt(1+t.slope*t.slope);
+  const du=Fx+along*ca+c.w*c.r, dw=Fy-along*sa-u*c.r;
+  c.u+=du*dt;c.w+=dw*dt;
+  if(c.u<0&&!ctl.brake)c.u=0;if(c.u<0)c.u=0;
+  if(c.u<0.5&&!c.air){c.w*=1-dt*4;c.r*=1-dt*6;}
+  // ---- corpo: sollevamento, beccheggio, rollio ----
+  const aero=c.air?0:PH.AERO*c.u*c.u;
+  c.vy+=(Fsum-G-aero)*dt;
+  c.q+=((Tp+Fx*PH.HCG*(c.air?0:1))/PH.IP-(c.air?0.05:0)*c.q)*dt;
+  c.p+=((Tr-Fy*PH.HCG)/PH.IR)*dt;
+  if(!c.air){c.q*=1-dt*1.2;c.p*=1-dt*2.5;}
+  c.y+=c.vy*dt;c.pitch+=c.q*dt;c.roll+=c.p*dt;
+  if(c.air){c.p+=(-c.roll*3-c.p*2.2)*dt;}c.roll=clamp(c.roll,-0.75,0.75);
+  // ---- moto nel piano pista ----
+  const vs2=c.u*Math.cos(c.a)-c.w*Math.sin(c.a),vx2=c.u*Math.sin(c.a)+c.w*Math.cos(c.a);
+  c.a+=(c.r-t.k*vs2)*dt;c.a=wrapA(c.a);
+  c.dist+=vs2*dt;c.x+=vx2*dt;
+  c.v=Math.hypot(c.u,c.w);
+  c.latG=c.latG+((u*c.r-dw*0)/G-c.latG)*Math.min(1,dt*6);
+  // ---- stress del telaio: scricchiolii ----
+  c.stress=Math.abs(c.latG)*0.8+Math.max(0,(c.nf+c.nr)-1.25)*1.2+Math.abs(c.roll)*2;
+  if(!isAI){c.creakCD-=dt;if(c.stress>0.75&&c.creakCD<=0&&!c.air){creak(Math.min(1,(c.stress-0.6)*1.2));c.creakCD=0.12+Math.random()*0.35/(c.stress);}}
+  if(!isAI&&wasAir&&!c.air){/* atterraggio: rumore già dato da thump/bottomOut */}
+  // ---- caduta ----
   const t2=samp(c.dist,{});
-  const onSurf=!t2.gap&&Math.abs(c.x)<=TR.HW;
-  const vtrack=c.v*Math.cos(c.a)*t2.slope;
-  if(onSurf){
-    if(c.y<=t2.h){
-      if(c.y<t2.h-1.0){c.falling=true;c.fallT=0;c.v*=0.3;}
-      else{const impact=vtrack-c.vy;if(c.air)landing(c,impact,isAI);c.y=t2.h;c.vy=vtrack;c.air=false;}
-    }else if(c.y>t2.h+0.12)c.air=true;
-  }else{
-    c.air=true;if(c.y<t2.h-0.6){c.falling=true;c.fallT=0;}
+  const off=t2.gap||Math.abs(c.x)>TR.HW;
+  if((off&&c.y<t2.h+PH.REST-0.9)||(c.air&&c.y<t2.h-0.6&&!isNaN(hAt(c.dist,c.x)))||(Math.abs(c.roll)>0.7&&!c.air)){
+    c.falling=true;c.fallT=0;c.fvs=vs2*0.8;c.fvx=vx2;c.q=-0.6;c.p=c.roll>0?0.8:-0.8;
   }
-  const tp=c.air?Math.atan2(c.vy,Math.max(5,c.v)):Math.atan(t2.slope);
-  c.pitch+=(tp-c.pitch)*Math.min(1,dt*(c.air?2.5:10));
-  // suspension
-  c.suspV+=(-c.susp*140-c.suspV*12)*dt;c.susp+=c.suspV*dt;
 }
-function landing(c,impact,isAI){
-  c.suspV-=Math.min(14,impact*0.9);
+function bottomOut(c,cv,isAI){
+  // impatto del telaio sul tampone (uno per evento, non per ruota): danni e perdita di velocità
+  if(cv<2)return;
+  c.u*=1-Math.min(0.08,cv*0.006);
   if(isAI)return;
-  if(impact>4)thump(Math.min(1,impact/16));
-  if(impact>10.5){const dmg=(impact-10.5)*4.2;c.damage=Math.min(100,c.damage+dmg);state.shake=Math.min(1.2,0.3+dmg/20);
-    msg(dmg>12?'ATTERRAGGIO DURISSIMO':'ATTERRAGGIO DURO',1.1,'#ffb21a');}
+  crunch(Math.min(1,cv/10));
+  const dmg=Math.max(0,cv-4)*3;
+  if(dmg>0){c.damage=Math.min(100,c.damage+dmg);state.shake=Math.min(1.2,0.25+dmg/16);
+    if(dmg>3)msg(dmg>10?'ATTERRAGGIO DURISSIMO':'ATTERRAGGIO DURO',1.1,'#ffb21a');}
 }
 function recover(c,isAI){
   let s=((c.dist%TR.L)+TR.L)%TR.L;let k=Math.floor(s/TR.ds)%TR.N;let back=0;
   while((TR.GA[k]||TR.GP[k])&&back<TR.N){k=(k-1+TR.N)%TR.N;back++;}
-  c.dist-=back*TR.ds;c.x=0;c.a=0;c.v=8;c.falling=false;c.fallT=0;c.air=false;placeOnTrack(c);
+  c.dist-=back*TR.ds;c.x=0;c.a=0;c.u=8;c.falling=false;c.fallT=0;placeOnTrack(c);
   if(!isAI){c.damage=Math.min(100,c.damage+14);msg('RECUPERO — TELAIO +14%',1.4,'#ffb21a');}
 }
 
@@ -418,18 +525,48 @@ function playerCtl(dt){
 }
 
 // ---------- Audio ----------
-let AC=null,eng=null,muted=false;
+let AC=null,eng=null,muted=false,NOISE=null,master=null;
 function ensureAudio(){
   if(AC)return;try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){return;}
+  master=AC.createGain();master.gain.value=1;master.connect(AC.destination);
+  const len=AC.sampleRate*2;NOISE=AC.createBuffer(1,len,AC.sampleRate);const d=NOISE.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;
+  const noiseSrc=()=>{const n=AC.createBufferSource();n.buffer=NOISE;n.loop=true;n.start();return n;};
+  // motore: due oscillatori + filtro che si apre col gas
   const o1=AC.createOscillator(),o2=AC.createOscillator(),lp=AC.createBiquadFilter(),g=AC.createGain();
-  o1.type='sawtooth';o2.type='square';lp.type='lowpass';lp.frequency.value=600;g.gain.value=0;
-  o1.connect(lp);o2.connect(lp);lp.connect(g);g.connect(AC.destination);o1.start();o2.start();eng={o1,o2,lp,g};
+  o1.type='sawtooth';o2.type='square';lp.type='lowpass';lp.frequency.value=600;lp.Q.value=4;g.gain.value=0;
+  o1.connect(lp);o2.connect(lp);lp.connect(g);g.connect(master);o1.start();o2.start();
+  // gomme: rumore filtrato passa-banda (stridio/strisciata)
+  const tn=noiseSrc(),tb=AC.createBiquadFilter(),tg=AC.createGain();tb.type='bandpass';tb.frequency.value=1100;tb.Q.value=6;tg.gain.value=0;tn.connect(tb);tb.connect(tg);tg.connect(master);
+  // rotolamento: rombo basso proporzionale alla velocità
+  const rn=noiseSrc(),rb=AC.createBiquadFilter(),rg=AC.createGain();rb.type='lowpass';rb.frequency.value=180;rg.gain.value=0;rn.connect(rb);rb.connect(rg);rg.connect(master);
+  // vento
+  const wn=noiseSrc(),wb=AC.createBiquadFilter(),wg=AC.createGain();wb.type='bandpass';wb.frequency.value=500;wb.Q.value=0.6;wg.gain.value=0;wn.connect(wb);wb.connect(wg);wg.connect(master);
+  eng={o1,o2,lp,g,tb,tg,rb,rg,wb,wg};
 }
-function engineSound(v,on,boost){if(!eng)return;const t=AC.currentTime;const f=38+v*2.1+(boost?18:0);
-  eng.o1.frequency.setTargetAtTime(f,t,0.05);eng.o2.frequency.setTargetAtTime(f*0.5,t,0.05);eng.lp.frequency.setTargetAtTime(400+v*14,t,0.1);
-  eng.g.gain.setTargetAtTime(muted||!on?0:0.06,t,0.08);}
-function thump(a){if(!AC||muted)return;const t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain();o.type='sine';o.frequency.setValueAtTime(110,t);o.frequency.exponentialRampToValueAtTime(35,t+0.25);
-  g.gain.setValueAtTime(0.35*a,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.3);o.connect(g);g.connect(AC.destination);o.start(t);o.stop(t+0.32);}
+function engineSound(c,on,boost,gas){if(!eng)return;const t=AC.currentTime,v=c.v||0;
+  // giri simulati con 4 marce
+  const gearTop=[18,32,48,99];let gi=0;while(gi<3&&v>gearTop[gi])gi++;const lo=gi?gearTop[gi-1]:0;
+  const rpm=0.25+0.75*Math.min(1,(v-lo)/(gearTop[gi]-lo+(gi===3?30:0)));
+  const f=42+rpm*95+(boost?14:0);
+  eng.o1.frequency.setTargetAtTime(f,t,0.04);eng.o2.frequency.setTargetAtTime(f*0.5,t,0.04);
+  eng.lp.frequency.setTargetAtTime((gas?700:320)+rpm*900,t,0.06);
+  const live=!muted&&on;
+  eng.g.gain.setTargetAtTime(live?(gas?0.055:0.035):0,t,0.08);
+  const sq=c.air?0:Math.min(1,Math.max(0,c.slip-0.06)*2.6+Math.max(0,(c.scrub||0)-2)*0.06);
+  eng.tg.gain.setTargetAtTime(live?sq*0.16:0,t,0.05);eng.tb.frequency.setTargetAtTime(800+sq*700+v*4,t,0.05);
+  eng.rg.gain.setTargetAtTime(live&&!c.air?Math.min(0.22,v*0.004):0,t,0.08);eng.rb.frequency.setTargetAtTime(120+v*3,t,0.1);
+  eng.wg.gain.setTargetAtTime(live?Math.min(0.07,v*v*0.000018):0,t,0.1);eng.wb.frequency.setTargetAtTime(300+v*12,t,0.1);
+}
+function thump(a){if(!AC||muted)return;const t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain();o.type='sine';o.frequency.setValueAtTime(95+a*40,t);o.frequency.exponentialRampToValueAtTime(32,t+0.22);
+  g.gain.setValueAtTime(0.4*a,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.28);o.connect(g);g.connect(master);o.start(t);o.stop(t+0.3);}
+function burst(dur,type,freq,q,gain,sweep){const t=AC.currentTime,n=AC.createBufferSource(),f=AC.createBiquadFilter(),g=AC.createGain();
+  n.buffer=NOISE;f.type=type;f.frequency.setValueAtTime(freq,t);if(sweep)f.frequency.exponentialRampToValueAtTime(sweep,t+dur);f.Q.value=q;
+  g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(gain,t+Math.min(0.03,dur*0.3));g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  n.connect(f);f.connect(g);g.connect(master);n.start(t,Math.random()*1.5);n.stop(t+dur+0.02);}
+// scricchiolio metallico del telaio: rumore in un filtro molto risonante con frequenza che scivola
+function creak(a){if(!AC||muted)return;const f=170+Math.random()*320;burst(0.07+Math.random()*0.16,'bandpass',f,28+Math.random()*20,0.05+a*0.22,f*(0.8+Math.random()*0.5));}
+// botta a fine corsa / strisciata del telaio
+function crunch(a){if(!AC||muted)return;thump(Math.min(1,a+0.2));burst(0.18+a*0.2,'highpass',1400,0.7,0.06+a*0.2,500);burst(0.12,'bandpass',260,12,0.08+a*0.15,140);}
 const muteBtn=document.getElementById('mute');
 function toggleMute(){muted=!muted;muteBtn.textContent='AUDIO: '+(muted?'OFF':'ON');}
 muteBtn.addEventListener('click',()=>{ensureAudio();toggleMute();});
@@ -495,46 +632,46 @@ function update(dt){
   state.shake=Math.max(0,state.shake-dt*2.2);
   for(const m of state.msgs)m.t-=dt;state.msgs=state.msgs.filter(m=>m.t>0);
   if(state.mode==='pause')return;
-  if(state.mode==='menu'){stepCar(ai,dt,{skill:1,lane:Math.sin(ai.dist/90)*1.5},true);return;}
+  if(state.mode==='menu'){stepCar(ai,dt,{skill:1,lane:Math.sin(ai.dist/90)*0.9},true);return;}
   const racing=state.mode==='race'||state.mode==='done';
   if(state.mode==='count'){state.count-=dt;if(state.count<=0){state.mode='race';msg('VIA!',1);}}
-  const ctl=playerCtl(dt);
+  const ctl=window.__botCtl?window.__botCtl(player,samp(player.dist,{})):playerCtl(dt);
   if(state.mode==='race'){
     state.raceT+=dt;
     stepCar(player,dt,ctl,false);
     const gapD=ai.dist-player.dist;
-    let skill=1;if(gapD>70)skill=0.92;else if(gapD<-60)skill=1.08;
-    let lane=Math.sin(ai.dist/110)*1.6;
-    if(Math.abs(gapD)<15)lane=player.x>0?-2.6:2.6;
+    let skill=1;if(gapD>70)skill=0.94;else if(gapD<-60)skill=1.05;
+    let lane=Math.sin(ai.dist/110)*0.9;
+    if(Math.abs(gapD)<15)lane=player.x>0?-1.8:1.8;
     if(ai.finishT==null||true)stepCar(ai,dt,{skill,lane},true);
     // collision
     player.bumpCD-=dt;
     const dd=ai.dist-player.dist,dx=ai.x-player.x,dy=ai.y-player.y;
     if(Math.abs(dd)<4.4&&Math.abs(dx)<2.0&&Math.abs(dy)<1.4&&!player.falling&&!ai.falling){
-      if(dd>0){player.v=Math.min(player.v,ai.v*0.9);player.dist=ai.dist-4.4;}else{ai.v=Math.min(ai.v,player.v*0.9);ai.dist=player.dist-4.4;}
-      const push=dx>0?-1:1;player.x+=push*0.15;player.a+=push*0.04;
-      if(player.bumpCD<=0){player.damage=Math.min(100,player.damage+3);player.bumpCD=0.6;state.shake=0.5;thump(0.5);msg('CONTATTO',0.8,'#ffb21a');}
+      if(dd>0){player.u=Math.min(player.u,ai.u*0.9);player.dist=ai.dist-4.4;}else{ai.u=Math.min(ai.u,player.u*0.9);ai.dist=player.dist-4.4;}
+      const push=dx>0?-1:1;player.x+=push*0.15;player.w+=push*2.5;player.r+=push*0.25;ai.w-=push*2;
+      if(player.bumpCD<=0){player.damage=Math.min(100,player.damage+3);player.bumpCD=0.6;state.shake=0.5;thump(0.5);crunch(0.6);msg('CONTATTO',0.8,'#ffb21a');}
     }
     lapCheck(player,true);lapCheck(ai,false);
     if(player.damage>=100&&state.mode==='race'){endRace('wreck');}
   }else if(state.mode==='done'){
     stepCar(player,dt,{steer:0,gas:false,brake:true,boost:false},false);
-    stepCar(ai,dt,{skill:0.8,lane:2},true);
+    stepCar(ai,dt,{skill:0.8,lane:1.5},true);
   }
 }
 
 // ---------- Cockpit & dashboard ----------
 function drawCockpit(c,ctl){
-  const top=H-dashH;const sus=c.susp*18;
+  const top=H-dashH;const sus=((c.comp[0]+c.comp[1])/2-0.1)*-60;
   // bonnet
   ctx.fillStyle='#1d2029';ctx.beginPath();ctx.moveTo(W*0.18,top);ctx.lineTo(W*0.36,top-H*0.07+sus);ctx.lineTo(W*0.64,top-H*0.07+sus);ctx.lineTo(W*0.82,top);ctx.closePath();ctx.fill();
   ctx.strokeStyle='#d6b428';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(W*0.5,top-H*0.07+sus);ctx.lineTo(W*0.5,top);ctx.stroke();
   // wheels
   const ww=Math.min(W*0.14,110),wh=H*0.13;
   const steer=(ctl?ctl.steer:0)*6;
-  for(const side of [-1,1]){const x=side<0?W*0.04:W*0.96-ww;const y=top-wh*0.75+sus*1.4;
+  for(const side of [-1,1]){const x=side<0?W*0.04:W*0.96-ww;const ci=c.comp[side<0?0:1];const y=top-wh*0.75+(0.1-ci)*170+(c.air?18:0);
     ctx.fillStyle='#0b0b0d';ctx.save();ctx.translate(x+ww/2,y+wh/2);ctx.rotate(steer*Math.PI/180);ctx.fillRect(-ww/2,-wh/2,ww,wh);
-    ctx.fillStyle='#24262c';const tread=(state.t*c.v*0.8)%12;for(let i=-wh/2+tread-12;i<wh/2;i+=12){ctx.fillRect(-ww/2,i,ww,4);}
+    ctx.fillStyle='#24262c';const tread=(state.t*c.u*0.8)%12;for(let i=-wh/2+tread-12;i<wh/2;i+=12){ctx.fillRect(-ww/2,i,ww,4);}
     ctx.restore();}
   // roll-cage
   ctx.fillStyle='#101219';ctx.fillRect(0,0,W,Math.max(10,H*0.025));
@@ -592,16 +729,18 @@ function frame(now){
   const h=1/120;while(acc>=h){update(h);acc-=h;}
   const view=state.mode==='menu'?ai:player;
   const w=carWorld(view);
-  const roll=view.falling?0.25:0;
-  setCam(w.x,view.y+1.15+view.susp*0.15,w.z,w.th+view.a,view.pitch*0.9,roll);
+  const sway=clamp(-view.latG*0.3,-0.55,0.55);const hy=w.th+view.a;
+  // la testa del pilota si sposta verso l'esterno della curva e l'orizzonte si inclina: si sente l'accelerazione laterale
+  setCam(w.x+Math.cos(hy)*sway,view.y+0.72,w.z-Math.sin(hy)*sway,hy,view.pitch,-view.roll*1.6-view.latG*0.055);
   const showDash=state.mode!=='menu';
   render(view,showDash);
   if(showDash){lastCtl={steer:steerS};drawCockpit(view,lastCtl);drawDash();drawMsgs();}
   const ctlNow=state.mode==='race'?playerCtl(0):null;
-  engineSound(view.v,state.mode==='race'||state.mode==='count'||state.mode==='done',ctlNow&&ctlNow.boost&&player.boost>0);
+  engineSound(view,state.mode==='race'||state.mode==='count'||state.mode==='done',ctlNow&&ctlNow.boost&&player.boost>0,ctlNow&&ctlNow.gas);
   requestAnimationFrame(frame);
 }
 
+window.__SR={get player(){return player},get ai(){return ai},state,update,startRace,loadTrack,aiControl,samp,get TR(){return TR}};
 loadTrack(0);setupCars(true);resize();drawTrackButtons();requestAnimationFrame(frame);
 })();
 </script>

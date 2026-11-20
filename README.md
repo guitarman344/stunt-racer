@@ -23,9 +23,13 @@ Un solo file HTML, nessuna dipendenza: puoi anche scaricare `index.html` e aprir
 
 Su telefono compaiono i pulsanti a schermo.
 
+### Fisica
+
+Ispirata all'originale: ogni ruota ha la sua sospensione (molla, ammortizzatore e tampone di fine corsa), l'aderenza dipende dal carico sulle gomme, in curva le gomme "strisciano" e rallentano l'auto, e in volo l'auto conserva la rotazione che aveva al decollo. Gli atterraggi che mandano la sospensione a fine corsa danneggiano il telaio. Il motore cambia suono col carico, le gomme stridono quando perdono aderenza e il telaio scricchiola nelle curve e nelle compressioni più dure.
+
 ### Piste
 
-- **Dorso di Mulo**: gobbe in serie e un dosso enorme a metà giro.
+- **Dorso di Mulo**: gobbe in serie e un dosso enorme poco dopo la partenza.
 - **Il Ponte Rotto**: due rampe sul vuoto, servono almeno 30 m/s per passare.
 - **Montagne Russe**: saliscendi ripidi, un trampolino e un tratto finale a dentiera.
 
@@ -56,10 +60,14 @@ A single HTML file with no dependencies: you can also download `index.html` and 
 
 On phones, on-screen buttons appear.
 
+### Physics
+
+Inspired by the original: each wheel has its own suspension (spring, damper and bump stop), grip depends on tyre load, tyres scrub and slow the car in corners, and in the air the car keeps the rotation it had at take-off. Landings that bottom out the suspension damage the chassis. The engine note changes with load, tyres squeal when they lose grip and the chassis creaks in hard corners and compressions.
+
 ### Tracks
 
 The in-game interface is currently in Italian; track names are translated here.
 
-- **Dorso di Mulo** (*Hump Back*): a series of bumps and a huge crest halfway round.
+- **Dorso di Mulo** (*Hump Back*): a series of bumps and a huge crest just after the start.
 - **Il Ponte Rotto** (*The Broken Bridge*): two ramps over a gap, you need at least 30 m/s to make it across.
 - **Montagne Russe** (*Roller Coaster*): steep climbs and drops, a ski jump and a washboard final section.
