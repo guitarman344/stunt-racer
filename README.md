@@ -17,11 +17,15 @@ Un solo file HTML, nessuna dipendenza: puoi anche scaricare `index.html` e aprir
 | ↑ / W | accelera |
 | ↓ / S | frena |
 | ← → / A D | sterza (solo a terra) |
-| Spazio | turbo (riserva limitata) |
+| ↑ + Spazio | turbo (riserva limitata, circa 9 s per gara) |
 | P | pausa |
 | M | audio on/off |
 
 Su telefono compaiono i pulsanti a schermo.
+
+### Garage
+
+Dal menu apri il **Garage** e scegli tra tre auto: **Saetta** (equilibrata), **Grillo** (leggera e scattante, telaio delicato) e **Bisonte** (pesante e potente, telaio robustissimo). Puoi regolare cambio (corto, normale, lungo), assetto (morbido, medio, rigido), gomme (dure, medie, morbide) e alettone (basso, medio, alto). Ogni scelta cambia la fisica dell'auto e si vede sul modello 3D che gira sulla pedana.
 
 ### Fisica
 
@@ -54,11 +58,15 @@ A single HTML file with no dependencies: you can also download `index.html` and 
 | ↑ / W | accelerate |
 | ↓ / S | brake |
 | ← → / A D | steer (only on the ground) |
-| Space | turbo (limited supply) |
+| ↑ + Space | turbo (limited supply, about 9 s per race) |
 | P | pause |
 | M | sound on/off |
 
 On phones, on-screen buttons appear.
+
+### Garage
+
+Open the **Garage** from the menu and pick one of three cars: **Saetta** (balanced), **Grillo** (light and nimble, fragile chassis) and **Bisonte** (heavy and powerful, very tough chassis). You can set the gearing (short, normal, long), suspension (soft, medium, stiff), tyres (hard, medium, soft) and rear wing (low, medium, high). Every choice changes the car's physics and shows on the 3D model spinning on the turntable.
 
 ### Physics
 
